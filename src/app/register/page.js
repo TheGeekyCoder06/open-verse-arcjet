@@ -1,7 +1,13 @@
 import RegisterForm from "@/components/auth/RegisterForm";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const token = (await cookies()).get("auth_token")?.value;
+  if(token){
+    redirect("/");
+  }
   return (
     <div className="min-h-screen w-full grid grid-cols-1 md:grid-cols-2">
 
