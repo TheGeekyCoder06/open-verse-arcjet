@@ -1,7 +1,8 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CommonLayout from "@/components/layout/layout";
-
+import { verifyAuthToken } from "@/lib/auth";
+import { cookies } from "next/headers";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -17,7 +18,9 @@ export const metadata = {
   description: "A platform to explore and share creative works",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const token = (await cookies()).get("auth_token")?.value;
+  const user = await verifyAuthToken(token);
   return (
     <html lang="en">
       <body

@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import React from "react";
+import { loginUser } from "@/actions/login"; // <-- your server action path
 
 const schema = z.object({
   email: z.string().email("Invalid email address"),
@@ -15,7 +15,6 @@ const schema = z.object({
 });
 
 export default function LoginForm() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
 
@@ -23,15 +22,13 @@ export default function LoginForm() {
     resolver: zodResolver(schema),
   });
 
-  const onSubmit = (data) => {
+  const onSubmit = async (data) => {
     setIsLoading(true);
-    console.log("Login Data:", data);
 
-    // simulate login
-    setTimeout(() => {
-      setIsLoading(false);
-      router.push("/dashboard"); // change if needed
-    }, 800);
+    // call server action — redirect happens there
+    await loginUser(data);
+
+    setIsLoading(false);
   };
 
   return (

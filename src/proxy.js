@@ -1,57 +1,59 @@
 import { createMiddleware } from "@arcjet/next";
-import arcjetClient from "@/lib/arcjet";
+import aj from "./lib/arcjet";
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
+import { verifyAuthToken } from "./lib/auth";
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|healthz).*)"],
 };
 
-const arcjetMiddleware = createMiddleware(arcjetClient);
+const arcjetMiddleware = createMiddleware(aj);
 
-async function verifyAuthToken(token) {
-  try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+export async function proxy(request) {
+  const pathname = request.nextUrl.pathname;
 
-    const { payload } = await jwtVerify(token, secret);
-    return { success: true, payload };
-  } catch {
-    return { success: false };
-  }
-}
-
-export default async function middleware(req) {
-  // Run Arcjet first
-  const arcjetResponse = await arcjetMiddleware(req);
-  if (arcjetResponse) return arcjetResponse;
-
-  const url = req.nextUrl;
-  const pathname = url.pathname;
-
-  const protectedRoutes = ["/dashboard", "/profile", "/"];
-  const isProtected = protectedRoutes.some((r) => pathname.startsWith(r));
+  // 🚫 Skip Arcjet email-based rules on pages where no email exists yet
+  const skipArcjetRoutes = ["/login", "/signup"];
+  const shouldSkipArcjet = skipArcjetRoutes.some((r) =>
+    pathname.startsWith(r)
+  );
 
   let response = NextResponse.next();
+  let arcjetResponse = null;
 
-  if (isProtected) {
-    const token = req.cookies.get("auth_token")?.value;
+  if (!shouldSkipArcjet) {
+    arcjetResponse = await arcjetMiddleware(request);
+  }
 
-    if (!token) {
-      const loginUrl = new URL("/login", req.url);
-      loginUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(loginUrl);
+  // 🔒 Protected routes
+  const protectedRoutes = ["/"];
+
+  const isProtectedRoute = protectedRoutes.some(
+    (route) =>
+      pathname === route || pathname.startsWith(route + "/")
+  );
+
+  if (isProtectedRoute) {
+    const token = (await cookies()).get("auth_token")?.value;
+    const user = token ? await verifyAuthToken(token) : null;
+
+    if (!user && pathname !== "/login") {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("from", pathname);
+      response = NextResponse.redirect(loginUrl);
     }
+  }
 
-    const user = await verifyAuthToken(token);
+  // ↩️ Apply Arcjet headers if present
+  if (arcjetResponse?.headers) {
+    arcjetResponse.headers.forEach((value, key) => {
+      response.headers.set(key, value);
+    });
+  }
 
-    if (!user.success) {
-      const loginUrl = new URL("/login", req.url);
-      loginUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    // attach user to request context
-    response.headers.set("x-user-id", user.payload.userId);
+  if (arcjetResponse && arcjetResponse.status !== 200) {
+    return arcjetResponse;
   }
 
   return response;

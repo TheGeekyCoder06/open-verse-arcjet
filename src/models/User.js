@@ -6,7 +6,6 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
 });
 
-// Prevent OverwriteModelError during hot reload
 const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export default User;

@@ -4,14 +4,15 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 
 export default async function LoginPage() {
-  const token = (await cookies()).get("auth_token")?.value;
-  if(token){
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
+  if (token) {
     redirect("/");
   }
+
   return (
     <div className="min-h-screen w-full grid grid-cols-1 md:grid-cols-2">
-
-      {/* Left — Form Section */}
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-2xl border bg-background p-6 shadow-sm">
           <h1 className="text-3xl font-bold tracking-tight mb-2">
@@ -35,7 +36,6 @@ export default async function LoginPage() {
         </div>
       </div>
 
-      {/* Right — Edge-to-Edge Image */}
       <div className="hidden md:block relative">
         <img
           src="/images/auth-illustration.jpg"

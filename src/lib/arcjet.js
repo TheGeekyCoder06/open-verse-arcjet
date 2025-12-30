@@ -10,7 +10,6 @@ import arcjet, {
 const aj = arcjet({
   key: process.env.ARCJET_KEY,
   rules: [
-    //protect sign up form
     protectSignup({
       email: {
         mode: "LIVE",
@@ -33,9 +32,11 @@ export const loginRules = arcjet({
   key: process.env.ARCJET_KEY,
   characteristics: ["ip.src"],
   rules: [
+    // NOTE: validateEmail only runs when email is passed in protect()
     validateEmail({
       mode: "LIVE",
       block: ["DISPOSABLE", "INVALID", "NO_MX_RECORDS"],
+      require: false, // <-- prevents runtime errors
     }),
     shield({ mode: "LIVE" }),
     detectBot({
@@ -59,12 +60,6 @@ export const blogPostRules = arcjet({
       allow: [],
     }),
     shield({ mode: "DRY_RUN" }),
-    // tokenBucket({
-    //   mode: "LIVE",
-    //   refillRate: 20,
-    //   interval: "1m",
-    //   capacity: 2,
-    // }),
   ],
 });
 
@@ -112,13 +107,9 @@ export const paymentRules = arcjet({
       allow: [],
     }),
     shield({ mode: "LIVE" }),
-    validateEmail({
-      mode: "LIVE",
-      block: ["DISPOSABLE", "INVALID", "NO_MX_RECORDS"],
-    }),
     slidingWindow({
       mode: "LIVE",
-      interval: "10m", // counts requests over a 10 minute sliding window
+      interval: "10m",
       max: 5,
     }),
   ],
