@@ -8,7 +8,7 @@ export default async function CommonLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-white">
-      {user && <Header user={user} />}
+      <Header />
       {children}
     </div>
   );
