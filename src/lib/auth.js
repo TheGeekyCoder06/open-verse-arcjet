@@ -1,33 +1,25 @@
-import { cookies } from "next/headers";
-import { verifyAuthToken } from "@/lib/auth";
-import BlogPost from "@/models/BlogPost";
+import { jwtVerify } from "jose";
 
-export async function getPostById(id) {
-  const token = cookies().get("token")?.value;
-  const user = await verifyAuthToken(token);
-
-  const post = await BlogPost.findById(id)
-    .populate("author", "_id username")
-    .lean();
-
-  if (!post) {
-    return { success: false, error: "Post not found" };
+export async function verifyAuthToken(token) {
+  if (!token) {
+    return null;
   }
 
-  const author = post.author ?? {};
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(process.env.JWT_SECRET)
+    );
 
-  return {
-    success: true,
-    post: {
-      ...post,
-      _id: post._id.toString(),
+    return {
+      userId: payload.userId,
+      email: payload.email,
+      userName: payload.userName,
+      isPremium: payload.isPremium,
+    };
+  } catch (e) {
+    console.error(e, "Error fetching token");
 
-      author: {
-        _id: author?._id ? author._id.toString() : "",
-        username: author?.username ?? "Unknown User",
-      },
-
-      currentUserId: user?.userId ?? null,
-    },
-  };
+    return null;
+  }
 }

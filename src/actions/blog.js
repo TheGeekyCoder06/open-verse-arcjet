@@ -1,12 +1,10 @@
 "use server";
 import mongoose from "mongoose";
-import { verifyAuthToken } from "@/lib/auth";
 import connectDb from "@/db/dbConfig";
 import BlogPost from "@/models/BlogPost";
 import { revalidatePath } from "next/cache";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 import { z } from "zod";
-
 import User from "@/models/User";
 
 const blogPostSchema = z.object({
@@ -17,16 +15,7 @@ const blogPostSchema = z.object({
 });
 
 export async function createBlogPostAction(data) {
-  const token = (await cookies()).get("token")?.value;
-  const user = await verifyAuthToken(token);
-
-  if (!user) {
-    return {
-      error: "Unauth user",
-      status: 401,
-    };
-  }
-
+  // 🟢 PUBLIC — no auth required
   const validateFields = blogPostSchema.safeParse(data);
 
   if (!validateFields.success) {
@@ -38,7 +27,6 @@ export async function createBlogPostAction(data) {
   const { title, coverImage, content, category } = validateFields.data;
 
   try {
-    // Arcjet removed — only log suspicious header if present
     const headersList = await headers();
     const isSuspicious = headersList.get("x-arcjet-suspicious") === "true";
 
@@ -51,7 +39,7 @@ export async function createBlogPostAction(data) {
     const post = new BlogPost({
       title,
       content,
-      author: user.userId,
+      author: data.userId || null, // 👈 public / optional user
       coverImage,
       category,
       comments: [],
@@ -70,8 +58,9 @@ export async function createBlogPostAction(data) {
       },
     };
   } catch (e) {
+    console.error(e);
     return {
-      error: e,
+      error: "Failed to create blog post",
     };
   }
 }
@@ -132,10 +121,7 @@ export async function getBlogPostsAction() {
       title: post.title,
       coverImage: post.coverImage,
       author: post.author
-        ? {
-            _id: post.author._id.toString(),
-            name: post.author.name,
-          }
+        ? { _id: post.author._id.toString(), name: post.author.name }
         : { _id: "", name: "Unknown User" },
       category: post.category,
       createdAt: post.createdAt.toISOString(),

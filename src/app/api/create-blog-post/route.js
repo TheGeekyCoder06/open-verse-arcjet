@@ -3,11 +3,15 @@ import { createBlogPostAction } from "@/actions/blog";
 import { revalidatePath } from "next/cache";
 
 export async function POST(req) {
-  console.log("Received request to create blog post");
+  console.log("Received request to create blog post (PUBLIC)");
 
   try {
     const data = await req.json();
-    const result = await createBlogPostAction(data);
+
+    const result = await createBlogPostAction({
+      ...data,
+      userId: null,   // public post — no auth
+    });
 
     if (result?.error) {
       return NextResponse.json(
