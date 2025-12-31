@@ -20,7 +20,7 @@ async function getUserProfile(slug) {
 }
 
 export default async function ProfilePage({ params }) {
-  const { slug } = params;
+  const { slug } = await params;
   const data = await getUserProfile(slug);
 
   if (!data) return notFound();

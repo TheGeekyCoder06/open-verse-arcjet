@@ -79,7 +79,7 @@ export default function HomeComponent({ posts }) {
                       <Avatar className="h-6 w-6">
                         <AvatarImage src="https://github.com/shadcn.png" />
                         <AvatarFallback>
-                          {postItem?.author?.name[0] || ""}
+                          {postItem?.author?.name?.[0] ?? ""}
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-[16px] font-medium text-gray-700">
@@ -146,7 +146,7 @@ export default function HomeComponent({ posts }) {
                       <Avatar className="h-12 w-12">
                         <AvatarImage src="https://github.com/shadcn.png" />
                         <AvatarFallback>
-                          {postItem?.author?.name[0] || ""}
+                          {postItem?.author?.name?.[0] ?? ""}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 space-y-1">

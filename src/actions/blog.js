@@ -1,10 +1,8 @@
-'use server';
+"use server";
 import mongoose from "mongoose";
-import { blogPostRules } from "@/lib/arcjet";
 import { verifyAuthToken } from "@/lib/auth";
 import connectDb from "@/db/dbConfig";
 import BlogPost from "@/models/BlogPost";
-import { request, shield } from "@arcjet/next";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { z } from "zod";
@@ -40,50 +38,16 @@ export async function createBlogPostAction(data) {
   const { title, coverImage, content, category } = validateFields.data;
 
   try {
-    const req = await request();
+    // Arcjet removed — only log suspicious header if present
     const headersList = await headers();
     const isSuspicious = headersList.get("x-arcjet-suspicious") === "true";
 
-    const decision = await blogPostRules.protect(req, {
-      shield: {
-        params: {
-          title,
-          content,
-          isSuspicious,
-        },
-      },
-      requested: 10,
-    });
-
-    console.log(decision);
-
-    if (decision.isErrored()) {
-      return {
-        error: "An error occured!",
-      };
-    }
-
-    if (decision.isDenied()) {
-      if (decision.reason.isShield()) {
-        return {
-          error:
-            "Input validation failed! Potentially malicious content detected",
-        };
-      }
-
-      if (decision.reason.isBot()) {
-        return {
-          error: "Bot activity detected",
-        };
-      }
-
-      return {
-        error: "Request denied",
-        status: 403,
-      };
+    if (isSuspicious) {
+      console.warn("Suspicious content flagged, but not blocked");
     }
 
     await connectDb();
+
     const post = new BlogPost({
       title,
       content,
@@ -96,9 +60,10 @@ export async function createBlogPostAction(data) {
 
     await post.save();
     revalidatePath("/");
+
     return {
       success: true,
-      post : {
+      post: {
         _id: post._id.toString(),
         title: post.title,
         coverImage: post.coverImage,
@@ -120,7 +85,6 @@ export async function getBlogPostByIdAction(id) {
       .populate("comments.author", "username email")
       .lean()
       .exec();
-
 
     if (!post) {
       return { error: "Blog not found", status: 404 };
@@ -152,7 +116,6 @@ export async function getBlogPostByIdAction(id) {
     return { error: "Failed to fetch blog details" };
   }
 }
-
 
 export async function getBlogPostsAction() {
   try {
