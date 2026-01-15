@@ -71,7 +71,7 @@ export async function loginUser(userData, req) {
       secure: process.env.NODE_ENV === "production",
       maxAge: 2 * 60 * 60,
       path: "/",
-      sameSite: "strict",
+      sameSite: "lax",
     });
 
     const from = req?.nextUrl?.searchParams?.get("from") || "/";
