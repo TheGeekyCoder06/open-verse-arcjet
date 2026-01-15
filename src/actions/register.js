@@ -7,8 +7,16 @@ import User from "@/models/User";
 import { z } from "zod";
 
 const schema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters long"),
-  email: z.string().email("Invalid email address"),
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters long")
+    .transform((val) => val.trim().toLowerCase()),
+
+  email: z
+    .string()
+    .email("Invalid email address")
+    .transform((val) => val.trim().toLowerCase()),
+
   password: z.string().min(6, "Password must be at least 6 characters long"),
 });
 
@@ -52,10 +60,10 @@ export async function registerUser(userData, req) {
     // 3) DB connection
     await connectDb();
 
-    // 4) Check duplicates
+    // 4) Check duplicates (case-insensitive because we normalized to lowercase)
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
-    });
+    }).lean();
 
     if (existingUser) {
       return {
@@ -68,7 +76,7 @@ export async function registerUser(userData, req) {
     // 5) Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 6) Create user
+    // 6) Create user (username stored lowercase always)
     await User.create({
       username,
       email,
@@ -82,7 +90,6 @@ export async function registerUser(userData, req) {
       user: { username, email },
       status: 201,
     };
-
   } catch (error) {
     console.error("Registration failed:", error);
 

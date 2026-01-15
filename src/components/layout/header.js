@@ -1,6 +1,7 @@
 "use client";
 
-import { Edit, User, LogOut } from "lucide-react";
+import { Edit, Search, User, LogOut } from "lucide-react";
+import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import Link from "next/link";
 import {
@@ -18,8 +19,11 @@ import { useEffect, useMemo, useState } from "react";
 
 export default function Header({ user: initialUser = null }) {
   const router = useRouter();
+
+  // Prefer server-provided user first (fast, no flicker)
   const [user, setUser] = useState(initialUser);
 
+  // Optional: refresh user on client in case token changed after hydration
   useEffect(() => {
     let mounted = true;
 
@@ -54,25 +58,28 @@ export default function Header({ user: initialUser = null }) {
   }, [user]);
 
   const usernameSlug = useMemo(() => {
-    return username ? username.toLowerCase() : "me";
+    return username ? username.toLowerCase() : null;
   }, [username]);
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-background border-b z-50">
       <div className="max-w-5xl mx-auto px-4">
-        <div className="grid grid-cols-3 items-center h-16">
-          {/* LEFT SPACER */}
-          <div />
+        <div className="flex items-center justify-between h-16">
+          <h1 className="text-2xl font-bold tracking-tight cursor-pointer">
+            <Link href="/">OpenVerse</Link>
+          </h1>
 
-          {/* CENTER LOGO */}
-          <div className="flex justify-center">
-            <Link href="/" className="text-2xl font-bold tracking-tight">
-              OpenVerse
-            </Link>
-          </div>
+          <div className="flex items-center gap-4">
+            <div className="relative hidden md:block">
+              <Input
+                type="text"
+                placeholder="Search blogs…"
+                className="pl-10 rounded-full bg-muted/40 focus-visible:ring-1"
+                readOnly
+              />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
 
-          {/* RIGHT ACTIONS */}
-          <div className="flex items-center justify-end gap-4">
             <Button
               onClick={() => router.push("/blog/create")}
               variant="ghost"
@@ -97,7 +104,11 @@ export default function Header({ user: initialUser = null }) {
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem
-                  onClick={() => router.push(`/profile/${usernameSlug}`)}
+                  disabled={!user?._id}
+                  onClick={() => {
+                    if (!user?._id) return;
+                    router.push(`/profile/${user._id}`);
+                  }}
                 >
                   <User className="h-4 w-4 mr-2" />
                   Profile
