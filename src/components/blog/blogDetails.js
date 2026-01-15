@@ -4,8 +4,9 @@ import { MessageCircleIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
+import { Progress } from "../ui/progress";
 import * as z from "zod";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addCommentAction } from "@/actions/blogInteractions";
@@ -25,6 +26,11 @@ function BlogDetails({ post, isAuthor }) {
 
   // ✅ Collapsible description state
   const [descExpanded, setDescExpanded] = useState(false);
+
+  // ✅ progress bar states
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const progressTimerRef = useRef(null);
 
   const { register, handleSubmit, reset } = useForm({
     resolver: zodResolver(schema),
@@ -47,10 +53,8 @@ function BlogDetails({ post, isAuthor }) {
   const description = useMemo(() => {
     if (post?.description) return post.description;
 
-    // fallback to first part of content (plain text)
     let text = plainTextFromHTML;
 
-    // remove duplicate title from start
     if (
       post?.title &&
       text.toLowerCase().startsWith(post.title.toLowerCase())
@@ -60,45 +64,6 @@ function BlogDetails({ post, isAuthor }) {
 
     return text;
   }, [post?.description, plainTextFromHTML, post?.title]);
-
-  // ✅ Clean actual content (remove duplicate first title line / first paragraph if repeated)
-  const cleanedContentHTML = useMemo(() => {
-    if (!post?.content) return "";
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(post.content, "text/html");
-
-    const titleText = (post?.title || "").replace(/\s+/g, " ").trim();
-
-    // Remove first element if it equals title
-    const first = doc.body.firstElementChild;
-    if (first && titleText) {
-      const firstText = (first.textContent || "").replace(/\s+/g, " ").trim();
-      if (firstText.toLowerCase() === titleText.toLowerCase()) {
-        first.remove();
-      }
-    }
-
-    // Remove first paragraph if it matches description beginning
-    const firstAfterTitle = doc.body.firstElementChild;
-    if (firstAfterTitle && description) {
-      const firstText = (firstAfterTitle.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      const descStart = description.replace(/\s+/g, " ").trim().slice(0, 80);
-
-      // if blog starts with same description
-      if (
-        firstText.length > 30 &&
-        firstText.toLowerCase().includes(descStart.toLowerCase())
-      ) {
-        firstAfterTitle.remove();
-      }
-    }
-
-    return doc.body.innerHTML;
-  }, [post?.content, post?.title, description]);
 
   useEffect(() => {
     if (!post?._id) return;
@@ -119,8 +84,40 @@ function BlogDetails({ post, isAuthor }) {
     };
   }, [router, post?._id]);
 
+  // ✅ helper to start fake progress
+  function startProgress() {
+    setIsUploading(true);
+    setUploadProgress(5);
+
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+
+    progressTimerRef.current = setInterval(() => {
+      setUploadProgress((prev) => {
+        // keep going until 90%
+        if (prev >= 90) return 90;
+        return prev + Math.floor(Math.random() * 8) + 3; // 3-10%
+      });
+    }, 250);
+  }
+
+  // ✅ helper to stop progress
+  function stopProgress(finalValue = 100) {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+
+    setUploadProgress(finalValue);
+
+    setTimeout(() => {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }, 600);
+  }
+
   async function onCommentSubmit(data) {
     setIsLoading(true);
+    startProgress();
 
     try {
       const result = await addCommentAction({
@@ -132,6 +129,8 @@ function BlogDetails({ post, isAuthor }) {
         throw new Error(result?.error || "Failed to add comment");
       }
 
+      stopProgress(100);
+
       toast({
         title: "Success",
         description: "Comment added successfully",
@@ -140,6 +139,8 @@ function BlogDetails({ post, isAuthor }) {
       reset();
       router.refresh();
     } catch (e) {
+      stopProgress(0);
+
       toast({
         title: "Error",
         description: e.message,
@@ -181,7 +182,8 @@ function BlogDetails({ post, isAuthor }) {
     }
   }
 
-  const shortDesc = description?.length > 220 ? description.slice(0, 220) : description;
+  const shortDesc =
+    description?.length > 220 ? description.slice(0, 220) : description;
   const showToggle = (description?.length || 0) > 220;
 
   return (
@@ -208,7 +210,6 @@ function BlogDetails({ post, isAuthor }) {
               {post?.comments?.length || 0}
             </Button>
 
-            {/* ✅ EDIT/DELETE ONLY FOR AUTHOR */}
             {isAuthor && (
               <div className="flex gap-2">
                 <Link href={`/blog/${post._id}/edit`}>
@@ -269,6 +270,16 @@ function BlogDetails({ post, isAuthor }) {
           rows={4}
           {...register("content")}
         />
+
+        {/* ✅ Upload Progress Bar */}
+        {isUploading && (
+          <div className="space-y-2 mb-4">
+            <Progress value={uploadProgress} />
+            <p className="text-xs text-gray-500">
+              Uploading... {uploadProgress}%
+            </p>
+          </div>
+        )}
 
         <Button type="submit" disabled={isLoading}>
           {isLoading ? "Submitting..." : "Submit Comment"}
