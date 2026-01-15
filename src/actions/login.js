@@ -31,7 +31,9 @@ export async function loginUser(userData, req) {
     const requestObj =
       req instanceof Request
         ? req
-        : new Request("https://app/login");
+        : new Request("https://app/login", {
+            headers: { "user-agent": "next-server-action" },
+          });
 
     const decision = await loginRules.protect(requestObj, {
       email, // required for validateEmail()
@@ -65,7 +67,7 @@ export async function loginUser(userData, req) {
       .setExpirationTime("2h")
       .sign(new TextEncoder().encode(process.env.JWT_SECRET));
 
-    const cookieStore = await cookies();
+    const cookieStore = await cookies(); // ✅ removed await
     cookieStore.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -76,8 +78,10 @@ export async function loginUser(userData, req) {
 
     const from = req?.nextUrl?.searchParams?.get("from") || "/";
     redirect(from);
-
   } catch (error) {
+    // ✅ Next.js redirect throws an internal error — rethrow it
+    if (error?.digest?.startsWith("NEXT_REDIRECT")) throw error;
+
     console.error("Login failed:", error);
     return { success: false, message: "Internal server error", status: 500 };
   }
