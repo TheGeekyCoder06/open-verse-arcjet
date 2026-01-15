@@ -9,21 +9,44 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addCommentAction } from "@/actions/blogInteractions";
+import { deleteBlogPostAction } from "@/actions/deleteBlogs"; // ✅ import delete action
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { pusherClient } from "@/lib/pusher-client";
+import { useEffect } from "react";
 
 const schema = z.object({
   content: z.string().min(1, "Comment is required"),
 });
 
-function BlogDetails({ post }) {
+function BlogDetails({ post, isAuthor }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { register, handleSubmit, reset } = useForm({
     resolver: zodResolver(schema),
   });
 
   const { toast } = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    const channel = pusherClient.subscribe("blogs");
+
+    const handler = ({ postId }) => {
+      if (postId === post._id) {
+        router.refresh();
+      }
+    };
+
+    channel.bind("changed", handler);
+
+    return () => {
+      channel.unbind("changed", handler);
+      pusherClient.unsubscribe("blogs");
+    };
+  }, [router, post._id]);
 
   async function onCommentSubmit(data) {
     setIsLoading(true);
@@ -44,7 +67,7 @@ function BlogDetails({ post }) {
       });
 
       reset();
-      router.refresh(); // 🔄 reload page -> fetch populated comments
+      router.refresh();
     } catch (e) {
       toast({
         title: "Error",
@@ -53,6 +76,37 @@ function BlogDetails({ post }) {
       });
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    const ok = confirm("Are you sure you want to delete this blog?");
+    if (!ok) return;
+
+    setIsDeleting(true);
+
+    try {
+      const result = await deleteBlogPostAction(post._id);
+
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to delete blog");
+      }
+
+      toast({
+        title: "Deleted",
+        description: "Blog deleted successfully",
+      });
+
+      router.push("/");
+      router.refresh();
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -79,6 +133,26 @@ function BlogDetails({ post }) {
               <MessageCircleIcon className="h-5 w-5 mr-1" />
               {post?.comments?.length}
             </Button>
+
+            {/* ✅ EDIT/DELETE ONLY FOR AUTHOR */}
+            {isAuthor && (
+              <div className="flex gap-2">
+                <Link href={`/blog/${post._id}/edit`}>
+                  <Button variant="outline" size="sm">
+                    Edit
+                  </Button>
+                </Link>
+
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -88,6 +162,7 @@ function BlogDetails({ post }) {
         <img
           src={post?.coverImage}
           className="w-full h-96 object-cover rounded-lg mb-8"
+          alt={post.title}
         />
       )}
 
@@ -117,8 +192,7 @@ function BlogDetails({ post }) {
         </h3>
 
         {post?.comments?.map((comment, index) => {
-          const name =
-            comment?.author?.username || "Unknown User";
+          const name = comment?.author?.username || "Unknown User";
 
           return (
             <div key={index} className="border-b py-4">

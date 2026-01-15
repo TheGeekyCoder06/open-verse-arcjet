@@ -1,26 +1,49 @@
 "use client";
+
 import { LayoutGrid, LayoutList } from "lucide-react";
 import { Button } from "../ui/button";
-import { useState } from "react";
-import { Avatar, AvatarImage } from "../ui/avatar";
-import { AvatarFallback } from "@radix-ui/react-avatar";
+import { useEffect, useState } from "react";
+import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
 import { BLOG_CATEGORIES } from "@/lib/categories";
 import { useRouter } from "next/navigation";
-export const dynamic = "force-dynamic";
+import { pusherClient } from "@/lib/pusher-client";
+
+function formatDate(dateValue) {
+  if (!dateValue) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(dateValue));
+}
 
 export default function HomeComponent({ posts }) {
   const [isGridView, setIsGridView] = useState(false);
   const [currentSelectedCategory, setCurrentSelectedCategory] = useState("");
   const router = useRouter();
-  console.log(currentSelectedCategory, "currentSelectedCategory");
+
+  // ✅ Pusher realtime refresh
+  useEffect(() => {
+    const channel = pusherClient.subscribe("blogs");
+
+    const handler = () => {
+      router.refresh(); // ✅ soft refresh instantly for ALL users
+    };
+
+    channel.bind("changed", handler);
+
+    return () => {
+      channel.unbind("changed", handler);
+      pusherClient.unsubscribe("blogs");
+    };
+  }, [router]);
 
   const filteredPosts =
     posts && posts.length > 0
       ? currentSelectedCategory === ""
         ? posts
-        : posts.filter(
-            (postItem) => postItem.category === currentSelectedCategory
-          )
+        : posts.filter((postItem) => postItem.category === currentSelectedCategory)
       : [];
 
   return (
@@ -47,63 +70,74 @@ export default function HomeComponent({ posts }) {
           </Button>
         </div>
       </div>
+
       <div className="flex flex-col lg:flex-row gap-8">
+        {/* POSTS LIST */}
         <div className="w-full lg:w-8/12">
           <div
             className={`${
               isGridView ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "space-y-6"
             }`}
           >
-            {filteredPosts && filteredPosts.length > 0 ? (
-              filteredPosts.map((postItem) => (
-                <article
-                  onClick={() => router.push(`/blog/${postItem._id}`)}
-                  key={postItem._id}
-                  className={`cursor-pointer ${
-                    isGridView ? "flex flex-col" : "flex gap-6"
-                  } bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden`}
-                >
-                  <div
-                    className={`${
-                      isGridView ? "w-full h-48" : "w-1/3 h-full"
-                    } relative`}
+            {filteredPosts.length > 0 ? (
+              filteredPosts.map((postItem) => {
+                const authorName = postItem?.author?.username || "Unknown User";
+
+                return (
+                  <article
+                    onClick={() => router.push(`/blog/${postItem._id}`)}
+                    key={postItem._id}
+                    className={`cursor-pointer ${
+                      isGridView ? "flex flex-col" : "flex gap-6"
+                    } bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden`}
                   >
-                    <img
-                      src={postItem?.coverImage}
-                      alt={postItem?.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className={`flex-1 p-4 ${isGridView ? "" : "w-2/3"}`}>
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>
-                          {postItem?.author?.name?.[0] ?? ""}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-[16px] font-medium text-gray-700">
-                        {postItem?.author?.name}
-                      </span>
+                    <div
+                      className={`${
+                        isGridView ? "w-full h-48" : "w-1/3 h-full"
+                      } relative`}
+                    >
+                      <img
+                        src={postItem?.coverImage}
+                        alt={postItem?.title}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                    <h3 className="text-xl font-bold mb-2 text-gray-800 line-clamp-2">
-                      {postItem?.title}
-                    </h3>
-                    <div>
-                      <span>
-                        {new Date(postItem?.createdAt).toLocaleDateString()}
-                      </span>
+
+                    <div className={`flex-1 p-4 ${isGridView ? "" : "w-2/3"}`}>
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src="https://github.com/shadcn.png" />
+                          <AvatarFallback>
+                            {(authorName?.[0] || "U").toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <span className="text-[16px] font-medium text-gray-700">
+                          {authorName}
+                        </span>
+                      </div>
+
+                      <h3 className="text-xl font-bold mb-2 text-gray-800 line-clamp-2">
+                        {postItem?.title}
+                      </h3>
+
+                      <div>
+                        <span>{formatDate(postItem?.createdAt)}</span>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))
+                  </article>
+                );
+              })
             ) : (
               <h2 className="font-bold text-4xl">No Blogs Found!</h2>
             )}
           </div>
         </div>
+
+        {/* RIGHT SIDEBAR */}
         <div className="w-full lg:w-4/12">
           <div className="sticky top-32 space-y-8">
+            {/* CATEGORY */}
             <div className="shadow-md p-6 rounded-lg">
               <h3 className="font-bold text-gray-800 mb-4 text-xl">
                 Recommended Category
@@ -115,7 +149,7 @@ export default function HomeComponent({ posts }) {
                       currentSelectedCategory === categoryItem.key
                         ? "bg-black hover:text-white text-white hover:bg-black"
                         : "bg-gray-200 hover:bg-gray-300"
-                    } rounded-full text-sm font-medium  border-none transition-colors duration-200`}
+                    } rounded-full text-sm font-medium border-none transition-colors duration-200`}
                     variant="outline"
                     size="sm"
                     key={categoryItem.key}
@@ -130,40 +164,49 @@ export default function HomeComponent({ posts }) {
                 ))}
               </div>
             </div>
+
+            {/* LATEST BLOGS */}
             <div className="rounded-lg shadow-md p-6">
               <h3 className="font-bold text-gray-800 mb-4 text-xl">
                 Latest Blogs
               </h3>
+
               <div className="space-y-4">
-                {posts &&
-                  posts.length > 0 &&
-                  posts.slice(0, 4).map((postItem) => (
-                    <div
-                      onClick={() => router.push(`/blog/${postItem._id}`)}
-                      key={postItem._id}
-                      className="flex items-start space-x-4 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors duration-200"
-                    >
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>
-                          {postItem?.author?.name?.[0] ?? ""}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 space-y-1">
-                        <h4 className="font-medium line-clamp-2 text-gray-800">
-                          {postItem?.title}
-                        </h4>
-                        <div className="flex items-start space-x-2 text-xs text-gray-500">
-                          <span className="text-[16px] font-bold">
-                            {postItem?.author?.name}
-                          </span>
-                          <span className="text-[12px] font-medium text-black ml-1">
-                            {new Date(postItem?.createdAt).toLocaleDateString()}
-                          </span>
+                {posts?.length > 0 &&
+                  posts.slice(0, 4).map((postItem) => {
+                    const authorName = postItem?.author?.username || "Unknown User";
+
+                    return (
+                      <div
+                        onClick={() => router.push(`/blog/${postItem._id}`)}
+                        key={postItem._id}
+                        className="flex items-start space-x-4 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors duration-200"
+                      >
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src="https://github.com/shadcn.png" />
+                          <AvatarFallback>
+                            {(authorName?.[0] || "U").toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="flex-1 space-y-1">
+                          <h4 className="font-medium line-clamp-2 text-gray-800">
+                            {postItem?.title}
+                          </h4>
+
+                          <div className="flex items-start space-x-2 text-xs text-gray-500">
+                            <span className="text-[16px] font-bold">
+                              {authorName}
+                            </span>
+
+                            <span className="text-[12px] font-medium text-black ml-1">
+                              {formatDate(postItem?.createdAt)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </div>

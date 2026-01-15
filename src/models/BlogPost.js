@@ -5,7 +5,8 @@ const CommentSchema = new mongoose.Schema({
 
   author: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",   // <-- relationship works now
+    ref: "User",
+    required: true,
   },
 
   createdAt: {
@@ -22,6 +23,7 @@ const BlogPostSchema = new mongoose.Schema({
   author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+    required: true,
   },
 
   category: String,

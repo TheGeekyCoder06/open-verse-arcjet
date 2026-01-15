@@ -3,13 +3,15 @@ import Header from "./header";
 import { verifyAuthToken } from "@/lib/auth";
 
 export default async function CommonLayout({ children }) {
-  const token = (await cookies()).get("token")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
   const user = await verifyAuthToken(token);
 
   return (
     <div className="min-h-screen bg-white">
-      <Header />
-      {children}
+      <Header user={user} />
+      <main className="pt-16">{children}</main>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import connectDb from "@/db/dbConfig";
 import User from "@/models/User";
 import BlogPost from "@/models/BlogPost";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic"; // ensure fresh data
 
@@ -12,11 +13,22 @@ async function getUserProfile(slug) {
   if (!user) return null;
 
   const posts = await BlogPost.find({ author: user._id })
-    .select("title coverImage createdAt category")
+    .select("_id title coverImage createdAt category") 
     .sort({ createdAt: -1 })
     .lean();
 
-  return { user, posts };
+  const serializedUser = {
+    ...user,
+    _id: user._id.toString(),
+  };
+
+  const serializedPosts = posts.map((post) => ({
+    ...post,
+    _id: post._id.toString(),
+    createdAt: post.createdAt?.toISOString?.() ?? post.createdAt,
+  }));
+
+  return { user: serializedUser, posts: serializedPosts };
 }
 
 export default async function ProfilePage({ params }) {
@@ -24,11 +36,11 @@ export default async function ProfilePage({ params }) {
   const data = await getUserProfile(slug);
 
   if (!data) return notFound();
+
   const { user, posts } = data;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
-      {/* Profile Header */}
       <div className="flex items-center space-x-4 mb-8">
         <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-xl font-bold">
           {user.username?.[0]?.toUpperCase()}
@@ -40,33 +52,32 @@ export default async function ProfilePage({ params }) {
         </div>
       </div>
 
-      {/* Posts Section */}
-      <h2 className="text-2xl font-semibold mb-4">
-        Blogs by {user.username}
-      </h2>
+      <h2 className="text-2xl font-semibold mb-4">Blogs by {user.username}</h2>
 
       {posts.length === 0 ? (
         <p className="text-gray-500">This user hasn't posted any blogs yet.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {posts.map((post) => (
-            <a
+            <Link
               key={post._id}
               href={`/blog/${post._id}`}
-              className="border rounded-xl p-4 hover:shadow transition"
+              className="border rounded-xl p-4 hover:shadow transition block"
             >
               {post.coverImage && (
                 <img
                   src={post.coverImage}
+                  alt={post.title}
                   className="w-full h-40 object-cover rounded mb-3"
                 />
               )}
 
               <h3 className="text-lg font-semibold">{post.title}</h3>
+
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(post.createdAt).toLocaleDateString()} — {post.category}
               </p>
-            </a>
+            </Link>
           ))}
         </div>
       )}

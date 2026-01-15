@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import React from "react";
-import { loginUser } from "@/actions/login"; // <-- your server action path
+import { loginUser } from "@/actions/login";
 
 const schema = z.object({
   email: z.string().email("Invalid email address"),
@@ -25,7 +25,6 @@ export default function LoginForm() {
   const onSubmit = async (data) => {
     setIsLoading(true);
 
-    // call server action — redirect happens there
     await loginUser(data);
 
     setIsLoading(false);
@@ -35,7 +34,6 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4">
 
-        {/* Email */}
         <div className="space-y-1">
           <div className="relative flex items-center">
             <Mail className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -53,7 +51,6 @@ export default function LoginForm() {
           )}
         </div>
 
-        {/* Password */}
         <div className="space-y-1">
           <div className="relative flex items-center">
             <Lock className="absolute left-3 h-4 w-4 text-muted-foreground pointer-events-none" />

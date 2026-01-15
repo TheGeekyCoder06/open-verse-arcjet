@@ -1,7 +1,6 @@
 "use client";
 
-import { Edit, Search, User, LogOut } from "lucide-react";
-import { Input } from "../ui/input";
+import { Edit, User, LogOut } from "lucide-react";
 import { Button } from "../ui/button";
 import Link from "next/link";
 import {
@@ -15,28 +14,34 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { logoutUser } from "@/actions/logout";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-export default function Header() {
+export default function Header({ user: initialUser = null }) {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(initialUser);
 
-  // Load logged-in user
   useEffect(() => {
+    let mounted = true;
+
     async function loadUser() {
       try {
         const res = await fetch("/api/me", { cache: "no-store" });
         const data = await res.json();
 
-        if (data?.user) {
-          setUser(data.user);
-        }
+        if (!mounted) return;
+
+        if (data?.user) setUser(data.user);
+        else setUser(null);
       } catch (err) {
         console.error("Failed to fetch user", err);
       }
     }
 
     loadUser();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function handleLogout() {
@@ -44,40 +49,35 @@ export default function Header() {
     if (result?.success) router.push("/login");
   }
 
-  const username =
-    user?.username ||
-    user?.email?.split("@")[0] ||
-    null;
+  const username = useMemo(() => {
+    return user?.username || user?.email?.split("@")?.[0] || null;
+  }, [user]);
 
-  const usernameSlug = username
-    ? username.toLowerCase()
-    : "me";
+  const usernameSlug = useMemo(() => {
+    return username ? username.toLowerCase() : "me";
+  }, [username]);
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-background border-b z-50">
       <div className="max-w-5xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="grid grid-cols-3 items-center h-16">
+          {/* LEFT SPACER */}
+          <div />
 
-          <h1 className="text-2xl font-bold tracking-tight cursor-pointer">
-            <Link href="/">OpenVerse</Link>
-          </h1>
+          {/* CENTER LOGO */}
+          <div className="flex justify-center">
+            <Link href="/" className="text-2xl font-bold tracking-tight">
+              OpenVerse
+            </Link>
+          </div>
 
-          <div className="flex items-center gap-4">
-
-            <div className="relative hidden md:block">
-              <Input
-                type="text"
-                placeholder="Search blogs…"
-                className="pl-10 rounded-full bg-muted/40 focus-visible:ring-1"
-                readOnly
-              />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </div>
-
+          {/* RIGHT ACTIONS */}
+          <div className="flex items-center justify-end gap-4">
             <Button
               onClick={() => router.push("/blog/create")}
               variant="ghost"
               size="icon"
+              aria-label="Create blog"
             >
               <Edit className="h-6 w-6" />
             </Button>
@@ -109,7 +109,6 @@ export default function Header() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
           </div>
         </div>
       </div>

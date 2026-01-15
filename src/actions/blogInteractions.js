@@ -1,4 +1,5 @@
 "use server";
+
 import mongoose from "mongoose";
 import { commentRules, searchRules } from "@/lib/arcjet";
 import { verifyAuthToken } from "@/lib/auth";
@@ -8,7 +9,7 @@ import { request } from "@arcjet/next";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-
+import { pusherServer } from "@/lib/pusher-server";
 
 /* =======================
    COMMENT SCHEMA
@@ -24,10 +25,10 @@ const commentSchema = z.object({
 ======================= */
 
 export async function addCommentAction(data) {
-  const token = (await cookies()).get("token")?.value;
+  const token = (await cookies()).get("auth_token")?.value;
   const user = await verifyAuthToken(token);
 
-  if (!user) {
+  if (!user?.userId) {
     return { error: "Unauth user", status: 401 };
   }
 
@@ -39,45 +40,48 @@ export async function addCommentAction(data) {
   const { postId, content } = validate.data;
 
   try {
+    // Arcjet protection
     const req = await request();
     const decision = await commentRules.protect(req, { requested: 1 });
 
     if (decision.isDenied()) {
       if (decision.reason.isRateLimit())
         return { error: "Rate limit exceeded", status: 429 };
-      if (decision.reason.isBot())
-        return { error: "Bot activity detected" };
+      if (decision.reason.isBot()) return { error: "Bot activity detected" };
       return { error: "Request denied", status: 403 };
     }
 
     await connectDb();
 
-    // ✅ Correct ID usage
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return { error: "Invalid postId", status: 400 };
+    }
+
     const post = await BlogPost.findById(postId);
 
     if (!post) {
-      return { error: "Blog post not found" };
+      return { error: "Blog post not found", status: 404 };
     }
 
-    if (!post.comments) post.comments = [];
-
-    // ✅ Store only author id (best practice)
     post.comments.push({
       content,
-      author: user.userId,
+      author: new mongoose.Types.ObjectId(user.userId),
       createdAt: new Date(),
     });
 
     await post.save();
 
-    // Refresh blog details page
     revalidatePath(`/blog/${postId}`);
+
+    await pusherServer.trigger("blogs", "changed", {
+      type: "comment",
+      postId: postId,
+    });
 
     return {
       success: true,
       message: "Comment added successfully",
     };
-
   } catch (err) {
     console.error(err);
     return { error: "Some error occurred!" };
@@ -89,7 +93,7 @@ export async function addCommentAction(data) {
 ======================= */
 
 export async function searchPostsAction(query) {
-  const token = (await cookies()).get("token")?.value;
+  const token = (await cookies()).get("auth_token")?.value;
   const user = await verifyAuthToken(token);
 
   if (!user) {
@@ -97,14 +101,14 @@ export async function searchPostsAction(query) {
   }
 
   try {
+    // Arcjet protection
     const req = await request();
     const decision = await searchRules.protect(req, { requested: 1 });
 
     if (decision.isDenied()) {
       if (decision.reason.isRateLimit())
         return { error: "Rate limit exceeded", status: 429 };
-      if (decision.reason.isBot())
-        return { error: "Bot activity detected" };
+      if (decision.reason.isBot()) return { error: "Bot activity detected" };
       return { error: "Request denied", status: 403 };
     }
 
@@ -116,7 +120,7 @@ export async function searchPostsAction(query) {
     )
       .sort({ score: { $meta: "textScore" } })
       .limit(10)
-      .populate("author", "name")
+      .populate("author", "username email") 
       .lean()
       .exec();
 
@@ -124,21 +128,22 @@ export async function searchPostsAction(query) {
       _id: post._id.toString(),
       title: post.title,
       coverImage: post.coverImage,
-      author: {
-        _id: post.author._id.toString(),
-        name: post.author.name,
-      },
+      author: post.author
+        ? {
+            _id: post.author._id.toString(),
+            username: post.author.username,
+            email: post.author.email,
+          }
+        : { _id: "", username: "Unknown User", email: "" },
       category: post.category,
       createdAt: post.createdAt.toISOString(),
     }));
 
     return { success: true, posts: serializedPosts };
-
   } catch (err) {
     console.error(err);
     return {
-      error:
-        "Some error occurred while searching. Please try again!",
+      error: "Some error occurred while searching. Please try again!",
     };
   }
 }

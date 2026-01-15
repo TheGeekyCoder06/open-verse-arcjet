@@ -1,11 +1,14 @@
 "use server";
+
 import mongoose from "mongoose";
 import connectDb from "@/db/dbConfig";
 import BlogPost from "@/models/BlogPost";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { z } from "zod";
-import User from "@/models/User";
+import { jwtVerify } from "jose";
+import "@/models/User"; 
+import { pusherServer } from "@/lib/pusher-server";
 
 const blogPostSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -14,8 +17,28 @@ const blogPostSchema = z.object({
   coverImage: z.string().min(1, "Image is required"),
 });
 
+async function getCurrentUserId() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
+  if (!token) return null;
+
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+
+    const userId = payload?.userId;
+    if (!userId || typeof userId !== "string") return null;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) return null;
+
+    return userId;
+  } catch {
+    return null;
+  }
+}
+
 export async function createBlogPostAction(data) {
-  // 🟢 PUBLIC — no auth required
   const validateFields = blogPostSchema.safeParse(data);
 
   if (!validateFields.success) {
@@ -36,17 +59,27 @@ export async function createBlogPostAction(data) {
 
     await connectDb();
 
-    const post = new BlogPost({
+    const userId = await getCurrentUserId();
+
+    if (!userId) {
+      return { error: "Login required to create a blog post" };
+    }
+
+    const post = await BlogPost.create({
       title,
       content,
-      author: data.userId || null, // 👈 public / optional user
+      author: new mongoose.Types.ObjectId(userId),
       coverImage,
       category,
       comments: [],
       upvotes: [],
     });
 
-    await post.save();
+    await pusherServer.trigger("blogs", "changed", {
+      type: "created",
+      postId: post._id.toString(),
+    });
+
     revalidatePath("/");
 
     return {
@@ -69,6 +102,10 @@ export async function getBlogPostByIdAction(id) {
   try {
     await connectDb();
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return { error: "Invalid blog id", status: 400 };
+    }
+
     const post = await BlogPost.findById(id)
       .populate("author", "username email")
       .populate("comments.author", "username email")
@@ -85,17 +122,28 @@ export async function getBlogPostByIdAction(id) {
       content: post.content,
       coverImage: post.coverImage,
       category: post.category,
+
       author: post.author
-        ? { _id: post.author._id.toString(), name: post.author.name }
-        : { _id: "", name: "Unknown User" },
+        ? {
+            _id: post.author._id.toString(),
+            username: post.author.username,
+            email: post.author.email,
+          }
+        : { _id: "", username: "Unknown User", email: "" },
+
       comments:
         post.comments?.map((c) => ({
           content: c.content,
           author: c.author
-            ? { _id: c.author._id.toString(), name: c.author.name }
-            : { _id: "", name: "Unknown User" },
+            ? {
+                _id: c.author._id.toString(),
+                username: c.author.username,
+                email: c.author.email,
+              }
+            : { _id: "", username: "Unknown User", email: "" },
           createdAt: c.createdAt,
         })) ?? [],
+
       createdAt: post.createdAt.toISOString(),
     };
 
@@ -112,7 +160,7 @@ export async function getBlogPostsAction() {
 
     const posts = await BlogPost.find()
       .sort({ createdAt: -1 })
-      .populate("author", "name")
+      .populate("author", "username email")
       .lean()
       .exec();
 
@@ -121,8 +169,12 @@ export async function getBlogPostsAction() {
       title: post.title,
       coverImage: post.coverImage,
       author: post.author
-        ? { _id: post.author._id.toString(), name: post.author.name }
-        : { _id: "", name: "Unknown User" },
+        ? {
+            _id: post.author._id.toString(),
+            username: post.author.username,
+            email: post.author.email,
+          }
+        : { _id: "", username: "Unknown User", email: "" },
       category: post.category,
       createdAt: post.createdAt.toISOString(),
     }));
