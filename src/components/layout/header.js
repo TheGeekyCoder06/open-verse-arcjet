@@ -72,15 +72,6 @@ export default function Header({ user: initialUser = null }) {
           </h1>
 
           <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <Input
-                type="text"
-                placeholder="Search blogs…"
-                className="pl-10 rounded-full bg-muted/40 focus-visible:ring-1"
-                readOnly
-              />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </div>
 
             <Button
               onClick={() => router.push("/blog/create")}
