@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
+import React from "react";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import React from "react";
 import { loginUser } from "@/actions/login";
 
 const schema = z.object({
@@ -17,22 +17,40 @@ const schema = z.object({
 export default function LoginForm() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
+  const [serverError, setServerError] = React.useState("");
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
     resolver: zodResolver(schema),
   });
 
   const onSubmit = async (data) => {
     setIsLoading(true);
+    setServerError("");
 
-    await loginUser(data);
+    const res = await loginUser(data);
 
+    // ✅ If login fails, show error in UI
+    if (res?.success === false) {
+      setServerError(res.message || "Login failed");
+      setIsLoading(false);
+      return;
+    }
+
+    // ✅ If login success -> server action redirects, so no need to do anything
     setIsLoading(false);
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4">
+        {/* ✅ Server error message */}
+        {serverError && (
+          <p className="text-sm font-medium text-red-500">{serverError}</p>
+        )}
 
         <div className="space-y-1">
           <div className="relative flex items-center">
@@ -70,7 +88,11 @@ export default function LoginForm() {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 text-muted-foreground hover:text-foreground"
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
             </button>
           </div>
 

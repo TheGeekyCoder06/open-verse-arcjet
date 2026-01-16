@@ -12,10 +12,12 @@ import { redirect } from "next/navigation";
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+  from: z.string().optional(), // ✅ pass this from client if needed
 });
 
 export async function loginUser(userData, req) {
   const validated = loginSchema.safeParse(userData);
+
   if (!validated.success) {
     return {
       success: false,
@@ -25,9 +27,10 @@ export async function loginUser(userData, req) {
     };
   }
 
-  const { email, password } = validated.data;
+  const { email, password, from } = validated.data;
 
   try {
+    // Arcjet protection
     const requestObj =
       req instanceof Request
         ? req
@@ -35,9 +38,7 @@ export async function loginUser(userData, req) {
             headers: { "user-agent": "next-server-action" },
           });
 
-    const decision = await loginRules.protect(requestObj, {
-      email, // required for validateEmail()
-    });
+    const decision = await loginRules.protect(requestObj, { email });
 
     if (decision?.reason?.isRateLimit?.()) {
       return { success: false, message: "Too many login attempts.", status: 429 };
@@ -51,12 +52,12 @@ export async function loginUser(userData, req) {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return { success: false, message: "Invalid email or password", status: 401 };
+      return { success: false, message: "Invalid email", status: 401 };
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return { success: false, message: "Invalid email or password", status: 401 };
+      return { success: false, message: "Incorrect password", status: 401 }; // ✅
     }
 
     const token = await new SignJWT({
@@ -67,7 +68,9 @@ export async function loginUser(userData, req) {
       .setExpirationTime("2h")
       .sign(new TextEncoder().encode(process.env.JWT_SECRET));
 
-    const cookieStore = await cookies(); // ✅ removed await
+    // ✅ keep await cookies() as you want
+    const cookieStore = await cookies();
+
     cookieStore.set("auth_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -76,10 +79,9 @@ export async function loginUser(userData, req) {
       sameSite: "lax",
     });
 
-    const from = req?.nextUrl?.searchParams?.get("from") || "/";
-    redirect(from);
+    redirect(from || "/");
   } catch (error) {
-    // ✅ Next.js redirect throws an internal error — rethrow it
+    // Next redirect throws internal error; rethrow it
     if (error?.digest?.startsWith("NEXT_REDIRECT")) throw error;
 
     console.error("Login failed:", error);
